@@ -25,6 +25,13 @@ export class ScopusProvider implements CitationProvider {
   }> {
     const apiKey = process.env.ELSEVIER_API_KEY;
 
+    console.log(
+  "[Elsevier] API key configured:",
+  Boolean(apiKey),
+  "length:",
+  apiKey?.length ?? 0
+);
+
     if (!apiKey) {
       return {
         citations: [],
@@ -45,11 +52,13 @@ export class ScopusProvider implements CitationProvider {
       qStr += ` AND PUBYEAR IS ${year}`;
     }
 
+    const safeRows = Math.min(rows, 25);
     const params = new URLSearchParams({
       query: qStr,
-      count: rows.toString(),
+      count: safeRows.toString(),
       start: offset.toString(),
     });
+
 
     const url = `${this.baseUrl}?${params.toString()}`;
 
@@ -61,14 +70,19 @@ export class ScopusProvider implements CitationProvider {
         },
       });
 
-      if (!response.ok) {
-        return {
-          citations: [],
-          totalResults: 0,
-          status: response.status === 429 ? "rate_limited" : "error",
-          error: `Scopus API request failed with status ${response.status}`,
-        };
-      }
+ if (!response.ok) {
+  const errorBody = await response.text();
+
+  console.log("[Scopus] HTTP status:", response.status);
+  console.log("[Scopus] Error body:", errorBody);
+
+  return {
+    citations: [],
+    totalResults: 0,
+    status: response.status === 429 ? "rate_limited" : "error",
+    error: `Scopus API request failed with status ${response.status}`,
+  };
+}
 
       const data = await response.json();
       const searchResults = data["search-results"];

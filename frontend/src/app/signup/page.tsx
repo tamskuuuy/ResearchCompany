@@ -22,6 +22,9 @@ export default function SignupPage() {
   const { signup, isConfigured } = useAuth();
   const router = useRouter();
 
+  const [requiresConfirmation, setRequiresConfirmation] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
+
   const validateEmail = (e: string) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
   };
@@ -29,6 +32,7 @@ export default function SignupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setRequiresConfirmation(false);
 
     if (!name.trim()) {
       setError("Please enter your full name.");
@@ -54,11 +58,15 @@ export default function SignupPage() {
     setIsSubmitting(true);
 
     try {
-      // Send ONLY email and password to Supabase Auth, and save name into profiles table
       const res = await signup(name.trim(), email.trim(), password);
 
       if (res.success) {
-        router.push("/dashboard");
+        if (res.requiresConfirmation) {
+          setRegisteredEmail(email.trim());
+          setRequiresConfirmation(true);
+        } else {
+          router.push("/dashboard");
+        }
       } else {
         setError(res.error || "Failed to create account. Please check your details.");
       }
@@ -68,6 +76,7 @@ export default function SignupPage() {
       setIsSubmitting(false);
     }
   };
+
 
   return (
     <div className="min-h-screen bg-[#F6F7F9] flex flex-col justify-between p-4 sm:p-6 lg:p-8 selection:bg-[#EEF2FF] selection:text-[#0000CD]">
@@ -97,22 +106,44 @@ export default function SignupPage() {
           className="w-full max-w-md"
         >
           <Card className="p-8 sm:p-10 shadow-md border-[#E5E7EB] space-y-6">
-            <div className="text-center space-y-2">
-              <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-[#111111] tracking-tight">
-                Create Workspace Account
-              </h1>
-              <p className="text-sm text-gray-500">
-                Join ResearchCompany to structure and collaborate on research
-              </p>
-
-              {!isConfigured && (
-                <div className="pt-1">
-                  <Badge variant="accent" className="text-[10px]">
-                    Preview Auth Mode (Supabase Keys Unset)
-                  </Badge>
+            {requiresConfirmation ? (
+              <div className="text-center space-y-4 py-4">
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto">
+                  <Mail className="w-6 h-6" />
                 </div>
-              )}
-            </div>
+                <h1 className="text-2xl font-extrabold font-heading text-[#111111] tracking-tight">
+                  Check Your Email
+                </h1>
+                <p className="text-sm text-gray-600">
+                  We sent a confirmation link to <span className="font-semibold text-gray-900">{registeredEmail}</span>. Please click the link to verify your account.
+                </p>
+                <div className="pt-4">
+                  <Link href="/login">
+                    <Button variant="primary" fullWidth size="lg">
+                      Go to Login Page
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="text-center space-y-2">
+                  <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-[#111111] tracking-tight">
+                    Create Workspace Account
+                  </h1>
+                  <p className="text-sm text-gray-500">
+                    Join ResearchCompany to structure and collaborate on research
+                  </p>
+
+                  {!isConfigured && (
+                    <div className="pt-1">
+                      <Badge variant="accent" className="text-[10px]">
+                        Preview Auth Mode (Supabase Keys Unset)
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+
 
             {error && (
               <motion.div
@@ -196,7 +227,10 @@ export default function SignupPage() {
                 Protected by Supabase SSR Session Auth
               </p>
             </div>
+              </>
+            )}
           </Card>
+
         </motion.div>
       </main>
 

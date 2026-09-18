@@ -228,40 +228,103 @@ export default function AssistantPage() {
       if (!response.body) throw new Error("ReadableStream not supported.");
 
       const reader = response.body.getReader();
-      const decoder = new TextDecoder("utf-8");
-      let accumulatedText = "";
+const decoder = new TextDecoder("utf-8");
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+let buffer = "";
+let accumulatedText = "";
+let streamFinished = false;
 
-        const chunkStr = decoder.decode(value, { stream: true });
-        const lines = chunkStr.split("\n\n");
+while (!streamFinished) {
+  const { done, value } = await reader.read();
 
-        for (const line of lines) {
-          if (!line.trim()) continue;
+  if (done) {
+    buffer += decoder.decode();
+    break;
+  }
 
-          if (line.startsWith("event: init")) {
-            const jsonStr = line.replace("event: init\ndata: ", "").trim();
-            try {
-              const initObj = JSON.parse(jsonStr);
-              if (initObj.conversationId) {
-                setActiveConvId(initObj.conversationId);
-              }
-            } catch {}
-          } else if (line.startsWith("data: ")) {
-            const dataStr = line.replace("data: ", "").trim();
-            if (dataStr === "[DONE]") break;
-            try {
-              const dataObj = JSON.parse(dataStr);
-              if (dataObj.chunk) {
-                accumulatedText += dataObj.chunk;
-                setStreamingText(accumulatedText);
-              }
-            } catch {}
-          }
-        }
+  // Tambahkan data baru ke buffer.
+  // SSE event bisa terpotong di tengah-tengah reader.read().
+  buffer += decoder.decode(value, { stream: true });
+
+  // Pisahkan event SSE berdasarkan baris kosong.
+  const events = buffer.split(/\r?\n\r?\n/);
+
+  // Event terakhir mungkin belum lengkap.
+  // Simpan untuk pembacaan berikutnya.
+  buffer = events.pop() || "";
+
+  for (const event of events) {
+    if (!event.trim()) continue;
+
+    const lines = event.split(/\r?\n/);
+
+    let eventType = "";
+    let dataStr = "";
+
+    for (const line of lines) {
+      if (line.startsWith("event:")) {
+        eventType = line.slice(6).trim();
+      } else if (line.startsWith("data:")) {
+        dataStr += line.slice(5).trim();
       }
+    }
+
+    // Initial event → mendapatkan conversation ID
+    if (eventType === "init") {
+      try {
+        const initObj = JSON.parse(dataStr);
+
+        if (initObj.conversationId) {
+          setActiveConvId(initObj.conversationId);
+        }
+      } catch (error) {
+        console.warn("Failed to parse init event:", error);
+      }
+
+      continue;
+    }
+
+    // Stream selesai
+    if (eventType === "done" || dataStr === "[DONE]") {
+      streamFinished = true;
+      break;
+    }
+
+    // Error dari backend
+    if (eventType === "error") {
+      try {
+        const errorObj = JSON.parse(dataStr);
+        throw new Error(
+          errorObj.error || "AI generation failed."
+        );
+      } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
+
+        throw new Error("AI generation failed.");
+      }
+    }
+
+    // Chunk AI
+    if (dataStr) {
+      try {
+        const dataObj = JSON.parse(dataStr);
+
+        if (typeof dataObj.chunk === "string") {
+          accumulatedText += dataObj.chunk;
+          setStreamingText(accumulatedText);
+        }
+      } catch (error) {
+        console.warn(
+          "Failed to parse AI SSE event:",
+          dataStr,
+          error
+        );
+      }
+    }
+  }
+}
 
       // Add completed AI response to local messages state
       if (accumulatedText.trim()) {

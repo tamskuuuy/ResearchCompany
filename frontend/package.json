@@ -6,12 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "dev:vinext": "vinext dev --port 3001",
+    "build:vinext": "vinext build",
+    "start:vinext": "wrangler dev --config dist/server/wrangler.json",
+    "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json --experimental-warm-cdn-cache",
+    "deploy:response-store": "wrangler deploy --config wrangler.response-store.jsonc"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.49.1",
     "clsx": "^2.1.1",
+    "eventsource-parser": "^4.1.1",
     "framer-motion": "^12.4.7",
     "lucide-react": "^0.475.0",
     "mammoth": "^1.12.1",
@@ -22,19 +28,24 @@
     "tailwind-merge": "^3.0.1"
   },
   "devDependencies": {
-    "@cloudflare/next-on-pages": "^1.13.16",
+    "@cloudflare/vite-plugin": "^1.54.11",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vinext/cloudflare": "^1.0.0-beta.8",
+    "@vitejs/plugin-rsc": "^0.5.35",
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
+    "react-server-dom-webpack": "^19.2.8",
     "tailwindcss": "^4",
     "typescript": "^5",
+    "vinext": "^1.0.0-beta.10",
     "wrangler": "^4.132.0"
   },
   "allowScripts": {
     "unrs-resolver@1.12.2": true
-  }
+  },
+  "type": "module"
 }

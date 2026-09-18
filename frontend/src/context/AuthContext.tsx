@@ -17,8 +17,9 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isConfigured: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signup: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; isEmailUnconfirmed?: boolean }>;
+  signup: (name: string, email: string, password: string) => Promise<{ success: boolean; error?: string; requiresConfirmation?: boolean }>;
+  resendConfirmationEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
 }
 
@@ -122,6 +123,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  const getRedirectUrl = () => {
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/auth/callback`;
+    }
+    return process.env.NEXT_PUBLIC_SITE_URL
+      ? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+      : "https://frontend.danadhyaksataman.workers.dev/auth/callback";
+  };
+
   const login = async (email: string, password: string) => {
     if (!isConfigured) {
       // Friendly simulation mode for unconfigured environment keys
@@ -148,6 +158,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
+        if (
+          error.message.toLowerCase().includes("email not confirmed") ||
+          error.message.toLowerCase().includes("email_not_confirmed")
+        ) {
+          return {
+            success: false,
+            error: "Your email address has not been confirmed yet. Please check your inbox for the confirmation link.",
+            isEmailUnconfirmed: true,
+          };
+        }
         if (error.message.includes("Invalid login credentials")) {
           return { success: false, error: "Incorrect email address or password." };
         }
@@ -181,12 +201,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      // 1. Sign up with Supabase Auth (Send ONLY email and password, store name in user_metadata)
+      const emailRedirectTo = getRedirectUrl();
+
+      // 1. Sign up with Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password,
         options: {
           data: { name: name.trim() },
+          emailRedirectTo,
         },
       });
 
@@ -197,8 +220,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: error.message };
       }
 
+      // Check if session was returned or email confirmation is required
+      const requiresConfirmation = !data.session && !!data.user;
+
       if (data.user) {
-        setUser(data.user);
+        // If session exists (email confirmation disabled on Supabase), set active user
+        if (data.session) {
+          setUser(data.user);
+        }
 
         // 2. Create profile record in profiles table
         try {
@@ -218,11 +247,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      return { success: true };
+      return { success: true, requiresConfirmation };
     } catch (err: any) {
       return {
         success: false,
         error: err?.message || "Failed to create account. Please check your connection and try again.",
+      };
+    }
+  };
+
+  const resendConfirmationEmail = async (email: string) => {
+    if (!isConfigured) {
+      return { success: true };
+    }
+
+    try {
+      const emailRedirectTo = getRedirectUrl();
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: email.trim(),
+        options: {
+          emailRedirectTo,
+        },
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || "Failed to resend confirmation email.",
       };
     }
   };
@@ -250,6 +307,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isConfigured,
         login,
         signup,
+        resendConfirmationEmail,
         logout,
       }}
     >
@@ -265,3 +323,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

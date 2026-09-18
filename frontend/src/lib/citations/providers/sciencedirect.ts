@@ -36,6 +36,8 @@ export class ScienceDirectProvider implements CitationProvider {
 
     const { query, rows = 15, offset = 0, year } = options;
 
+const safeRows = Math.min(rows, 20);
+
     if (!query || !query.trim()) {
       return { citations: [], totalResults: 0, status: "available" };
     }
@@ -45,11 +47,12 @@ export class ScienceDirectProvider implements CitationProvider {
       qStr += ` AND year(${year})`;
     }
 
-    const params = new URLSearchParams({
-      query: qStr,
-      display: rows.toString(),
-      offset: offset.toString(),
-    });
+const params = new URLSearchParams({
+  query: qStr,
+  count: safeRows.toString(),
+  start: offset.toString(),
+  view: "STANDARD",
+});
 
     const url = `${this.baseUrl}?${params.toString()}`;
 
@@ -61,8 +64,13 @@ export class ScienceDirectProvider implements CitationProvider {
         },
       });
 
-      if (!response.ok) {
-        let errDetail = `ScienceDirect API request failed with status ${response.status}`;
+   if (!response.ok) {
+  const errorBody = await response.text();
+
+  console.log("[ScienceDirect] HTTP status:", response.status);
+  console.log("[ScienceDirect] Error body:", errorBody);
+
+  let errDetail = `ScienceDirect API request failed with status ${response.status}`;
         try {
           const errJson = await response.json();
           const msg = errJson["error-response"]?.["error-message"] || errJson["service-error"]?.["status"]?.["statusText"];

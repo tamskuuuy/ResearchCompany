@@ -16,13 +16,18 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isEmailUnconfirmed, setIsEmailUnconfirmed] = useState(false);
+  const [resendStatus, setResendStatus] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
 
-  const { login, isConfigured } = useAuth();
+  const { login, resendConfirmationEmail, isConfigured } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setResendStatus(null);
+    setIsEmailUnconfirmed(false);
 
     if (!email.trim()) {
       setError("Please enter your email address.");
@@ -41,6 +46,9 @@ export default function LoginPage() {
         router.push("/dashboard");
       } else {
         setError(res.error || "Authentication failed. Please check your credentials.");
+        if (res.isEmailUnconfirmed) {
+          setIsEmailUnconfirmed(true);
+        }
       }
     } catch (err: any) {
       setError("An unexpected error occurred. Please try again.");
@@ -48,6 +56,28 @@ export default function LoginPage() {
       setIsSubmitting(false);
     }
   };
+
+  const handleResendConfirmation = async () => {
+    if (!email.trim()) {
+      setResendStatus("Please enter your email address above first.");
+      return;
+    }
+    setIsResending(true);
+    setResendStatus(null);
+    try {
+      const res = await resendConfirmationEmail(email);
+      if (res.success) {
+        setResendStatus("Confirmation email sent! Please check your inbox and spam folder.");
+      } else {
+        setResendStatus(res.error || "Failed to resend confirmation email.");
+      }
+    } catch {
+      setResendStatus("Failed to send email. Please try again later.");
+    } finally {
+      setIsResending(false);
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-[#F6F7F9] flex flex-col justify-between p-4 sm:p-6 lg:p-8 selection:bg-[#EEF2FF] selection:text-[#0000CD]">
@@ -98,12 +128,39 @@ export default function LoginPage() {
               <motion.div
                 initial={{ opacity: 0, y: -5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-start gap-2.5"
+                className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 space-y-2"
               >
-                <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                <span>{error}</span>
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <span>{error}</span>
+                </div>
+                {isEmailUnconfirmed && (
+                  <div className="pt-2 border-t border-red-200/60 flex items-center justify-between">
+                    <span className="text-[11px] text-red-800">Didn't receive the email?</span>
+                    <button
+                      type="button"
+                      onClick={handleResendConfirmation}
+                      disabled={isResending}
+                      className="font-semibold text-[#0000CD] hover:underline text-[11px] disabled:opacity-50"
+                    >
+                      {isResending ? "Sending..." : "Resend Confirmation Email"}
+                    </button>
+                  </div>
+                )}
               </motion.div>
             )}
+
+            {resendStatus && (
+              <motion.div
+                initial={{ opacity: 0, y: -5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3.5 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-700 flex items-center gap-2"
+              >
+                <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0" />
+                <span>{resendStatus}</span>
+              </motion.div>
+            )}
+
 
             <form onSubmit={handleSubmit} className="space-y-4 pt-2">
               <Input
